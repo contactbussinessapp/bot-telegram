@@ -1,10 +1,15 @@
+```python
 import sqlite3
 import requests
+import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, CallbackQueryHandler, filters, ContextTypes
 
-# 🔐 TU TOKEN (PEGÁ EL NUEVO)
-TOKEN = "BOT_TOKEN"
+# 🔐 TOKEN desde variable de entorno (Render)
+TOKEN = os.getenv("BOT_TOKEN")
+
+if not TOKEN:
+    raise ValueError("❌ Falta BOT_TOKEN en variables de entorno")
 
 # 💰 AFILIADOS
 AMAZON_ID = "radarvip01-20"
@@ -180,3 +185,4 @@ app.add_handler(MessageHandler(filters.TEXT, buscar))
 
 print("🔥 BOT FUNCIONANDO...")
 app.run_polling()
+```
