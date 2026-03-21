@@ -4,7 +4,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, CallbackQueryHandler, filters, ContextTypes
 
 # 🔐 TU TOKEN (PEGÁ EL NUEVO)
-TOKEN = "8695750211:AAHDfL-ik8tX4fuWev_WI66dX4-GlzARy0c"
+TOKEN = "BOT_TOKEN"
 
 # 💰 AFILIADOS
 AMAZON_ID = "radarvip01-20"
