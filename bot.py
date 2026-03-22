@@ -98,4 +98,6 @@ def handle_search(message):
 # RUN
 # ------------------------
 print("🔥 BOT FUNCIONANDO...")
-bot.polling()
+
+bot.remove_webhook()   # 🔥 FIX ERROR 409
+bot.polling(none_stop=True)
