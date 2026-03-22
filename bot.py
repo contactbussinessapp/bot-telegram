@@ -11,8 +11,10 @@ TOKEN = os.environ.get('TOKEN')
 SHEET_ID = '1_NFTMtOtxiIB4vg6h01VL5dAdDnTT7x5jbFjIvPUnTY'
 URL_SHEET = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv'
 
-# ID de Afiliado de Amazon (¡Ya configurado!)
+# Tus credenciales de monetización
 AMAZON_TAG = "radarvip01-20"
+ML_TOOL_ID = "85456160"
+ML_CAMPAIGN = "RadarVIPBot"  # Etiqueta para identificar las ventas del bot
 
 bot = telebot.TeleBot(TOKEN)
 user_data = {}
@@ -110,7 +112,7 @@ def handle_search(message):
         res += "🌐 *Buscar en tiendas globales (Mejores precios):*\n"
         res += f"🛒 [Ver opciones en Amazon](https://www.amazon.com/s?k={query_url_amz}&tag={AMAZON_TAG})\n"
         res += f"🛍️ [Ver opciones en AliExpress]({aliexpress_deep_link})\n"
-        res += f"🤝 [Ver opciones en Mercado Libre](https://listado.mercadolibre.com.ar/{query_url_ml})\n\n"
+        res += f"🤝 [Ver opciones en Mercado Libre](https://listado.mercadolibre.com.ar/{query_url_ml}?matt_tool={ML_TOOL_ID}&matt_word={ML_CAMPAIGN})\n\n"
 
         res += "🔥 *Oportunidades VIP del día:*\n"
         if mis_productos_vip:
@@ -129,7 +131,7 @@ def handle_search(message):
 # ------------------------
 # RUN
 # ------------------------
-print("🔥 RADAR VIP ESTÁ EN LÍNEA Y MONETIZANDO...")
+print("🔥 RADAR VIP ESTÁ EN LÍNEA Y MONETIZANDO AL 100%...")
 
 bot.remove_webhook()
 bot.polling(none_stop=True)
