@@ -11,8 +11,8 @@ TOKEN = os.environ.get('TOKEN')
 SHEET_ID = '1_NFTMtOtxiIB4vg6h01VL5dAdDnTT7x5jbFjIvPUnTY'
 URL_SHEET = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv'
 
-# ID de Afiliado de Amazon (Reemplaza este cuando tengas el tuyo)
-AMAZON_TAG = "tu_codigo_amazon-20"
+# ID de Afiliado de Amazon (¡Ya configurado!)
+AMAZON_TAG = "radarvip01-20"
 
 bot = telebot.TeleBot(TOKEN)
 user_data = {}
@@ -104,9 +104,9 @@ def handle_search(message):
         # === LÓGICA DE MONETIZACIÓN ALIEXPRESS ===
         busqueda_base = f"https://www.aliexpress.com/wholesale?SearchText={query_url_amz}"
         busqueda_codificada = urllib.parse.quote(busqueda_base, safe='')
-        # Aquí inyectamos tu código _c3MIbod9
         aliexpress_deep_link = f"https://s.click.aliexpress.com/deep_link.htm?aff_short_key=_c3MIbod9&dl_target_url={busqueda_codificada}"
 
+        # === CONSTRUCCIÓN DE ENLACES GLOBALES ===
         res += "🌐 *Buscar en tiendas globales (Mejores precios):*\n"
         res += f"🛒 [Ver opciones en Amazon](https://www.amazon.com/s?k={query_url_amz}&tag={AMAZON_TAG})\n"
         res += f"🛍️ [Ver opciones en AliExpress]({aliexpress_deep_link})\n"
