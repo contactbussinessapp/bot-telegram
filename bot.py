@@ -4,6 +4,7 @@ import requests
 import csv
 import random
 import urllib.parse
+import re
 from io import StringIO
 
 # === CONFIGURACIÓN ===
@@ -14,7 +15,7 @@ URL_SHEET = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=cs
 # Tus credenciales de monetización
 AMAZON_TAG = "radarvip01-20"
 ML_TOOL_ID = "85456160"
-ML_CAMPAIGN = "RadarVIPBot"  # Etiqueta para identificar las ventas del bot
+ML_CAMPAIGN = "RadarVIPBot"
 
 bot = telebot.TeleBot(TOKEN)
 user_data = {}
@@ -71,9 +72,19 @@ def handle_search(message):
         bot.reply_to(message, "Por favor, usa /start para seleccionar tu país primero.")
         return
 
-    query = message.text.strip().lower()
-    query_url_amz = query.replace(' ', '+')
-    query_url_ml = query.replace(' ', '-')
+    # === FILTRO ANTI-ERRORES ===
+    texto_original = message.text.lower()
+    # Elimina todo lo que NO sea letra, número o espacio (borra comillas, símbolos, emojis)
+    query_limpia = re.sub(r'[^a-záéíóúñ0-9\s]', '', texto_original).strip()
+
+    # Si el usuario mandó solo símbolos y quedó vacío
+    if not query_limpia:
+        bot.reply_to(message, "⚠️ Por favor, escribe el nombre del producto usando letras.")
+        return
+
+    # Usamos la versión limpia para armar las URLs
+    query_url_amz = query_limpia.replace(' ', '+')
+    query_url_ml = query_limpia.replace(' ', '-')
 
     msg_buscando = bot.send_message(chat_id, "🔍 *Buscando los mejores precios para ti...*", parse_mode="Markdown")
 
@@ -95,10 +106,10 @@ def handle_search(message):
 
             if pais_excel == "AR":
                 mis_productos_vip.append((nombre, link))
-                if query in nombre.lower():
+                if query_limpia in nombre.lower():
                     resultados_directos += f"✔️ *{nombre}*\n🔗 [Comprar ahora]({link})\n\n"
 
-        res = f"🎯 *Resultados para:* _{message.text}_\n\n"
+        res = f"🎯 *Resultados para:* _{query_limpia}_\n\n"
 
         if resultados_directos:
             res += f"📦 *¡Lo tenemos en stock!*\n{resultados_directos}"
@@ -131,7 +142,7 @@ def handle_search(message):
 # ------------------------
 # RUN
 # ------------------------
-print("🔥 RADAR VIP ESTÁ EN LÍNEA Y MONETIZANDO AL 100%...")
+print("🔥 RADAR VIP ESTÁ EN LÍNEA Y PROTEGIDO...")
 
 bot.remove_webhook()
 bot.polling(none_stop=True)
