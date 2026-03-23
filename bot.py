@@ -18,7 +18,7 @@ ALI_KEY = "_c3MIbod9"
 bot = telebot.TeleBot(TOKEN)
 user_data = {}
 
-# === 2. DICCIONARIO DE IDIOMAS (TEXTS) MULTILINGÜE COMPLETO ===
+# === 2. DICCIONARIO DE IDIOMAS (TEXTS) ===
 TEXTS = {
     'es': {
         'configured': "✅ *Configurado para {name} {flag}*\n\n¿Qué producto estás buscando hoy? Escríbelo aquí abajo:",
@@ -134,7 +134,7 @@ TEXTS = {
     }
 }
 
-# === 3. DICCIONARIO MAESTRO DE PAÍSES (REGLAS Y MONETIZACIÓN ESPECÍFICA) ===
+# === 3. DICCIONARIO MAESTRO DE PAÍSES ===
 COUNTRY_CONFIG = {
     # --- AMÉRICA ---
     'AR': {'name': 'Argentina', 'flag': '🇦🇷', 'lang': 'es', 'show_ml': True, 'ml_domain': 'com.ar', 'ml_tool': '85456160', 'ml_camp': 'RadarVIPBot', 'show_amz': False, 'show_ali': True, 'show_vip': True},
@@ -180,7 +180,6 @@ COUNTRY_CONFIG = {
 def send_welcome(message):
     markup = telebot.types.InlineKeyboardMarkup()
     
-    # Agrupamos los botones en filas para que queden compactos en la pantalla
     botones = [
         telebot.types.InlineKeyboardButton("🇦🇷 AR", callback_data="set_AR"),
         telebot.types.InlineKeyboardButton("🇨🇱 CL", callback_data="set_CL"),
@@ -212,19 +211,12 @@ def send_welcome(message):
         telebot.types.InlineKeyboardButton("🇪🇬 EG", callback_data="set_EG")
     ]
     
-    # Organizamos los botones en filas de 4
     for i in range(0, len(botones), 4):
         markup.row(*botones[i:i+4])
     
-    # El botón Global ocupa una fila entera al final
     markup.row(telebot.types.InlineKeyboardButton("🌍 GLOBAL", callback_data="set_GLOBAL"))
     
-    bot.reply_to(
-        message,
-        "LANGUAGE",
-        reply_markup=markup,
-        parse_mode="Markdown"
-    )
+    bot.reply_to(message, "LANGUAGE", reply_markup=markup, parse_mode="Markdown")
 
 # === 5. ASIGNACIÓN DEL PAÍS ===
 @bot.callback_query_handler(func=lambda call: call.data.startswith("set_"))
@@ -271,27 +263,31 @@ def handle_search(message):
         
         # --- VIP PROPIOS (Google Sheets) ---
         if config['show_vip']:
-            r = requests.get(URL_SHEET)
-            r.encoding = 'utf-8'
-            csv_reader = list(csv.reader(StringIO(r.text)))
-            
-            mis_productos_vip = []
-            for i, columnas in enumerate(csv_reader):
-                if i == 0 or len(columnas) < 3:
-                    continue 
-                nombre = columnas[0].strip()
-                pais_excel = columnas[1].strip().upper()
-                link = columnas[2].strip()
+            try:
+                r = requests.get(URL_SHEET)
+                r.encoding = 'utf-8'
+                csv_reader = list(csv.reader(StringIO(r.text)))
+                
+                mis_productos_vip = []
+                for i, columnas in enumerate(csv_reader):
+                    if i == 0 or len(columnas) < 3:
+                        continue 
+                    nombre = columnas[0].strip()
+                    pais_excel = columnas[1].strip().upper()
+                    link = columnas[2].strip()
 
-                if pais_excel == pais_code and query_limpia in nombre.lower():
-                    mis_productos_vip.append((nombre, link))
-            
-            if mis_productos_vip:
-                res += t['vip_local']
-                destacados = random.sample(mis_productos_vip, min(3, len(mis_productos_vip)))
-                for p_nombre, p_link in destacados:
-                    res += f"💎 [{p_nombre}]({p_link})\n"
-                res += "\n"
+                    # Acepta tanto "AR" como "ARGENTINA" escrito en tu Excel
+                    if pais_excel in [pais_code.upper(), config['name'].upper()] and query_limpia in nombre.lower():
+                        mis_productos_vip.append((nombre, link))
+                
+                if mis_productos_vip:
+                    res += t['vip_local']
+                    destacados = random.sample(mis_productos_vip, min(3, len(mis_productos_vip)))
+                    for p_nombre, p_link in destacados:
+                        res += f"💎 [{p_nombre}]({p_link})\n"
+                    res += "\n"
+            except Exception as e:
+                print("Error leyendo Google Sheets:", e)
 
         # --- TIENDAS Y ENLACES ---
         res += t['stores']
@@ -318,6 +314,6 @@ def handle_search(message):
         bot.edit_message_text(t['error_conn'], chat_id, msg_buscando.message_id)
 
 # === 7. RUN ===
-print("🔥 RADAR VIP ESTÁ EN LÍNEA: MENÚ COMPACTO ACTIVADO...")
+print("🔥 RADAR VIP ESTÁ EN LÍNEA: MENÚ COMPACTO Y VIP ARREGLADO...")
 bot.remove_webhook()
 bot.polling(none_stop=True)
