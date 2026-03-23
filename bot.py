@@ -13,8 +13,6 @@ SHEET_ID = '1_NFTMtOtxiIB4vg6h01VL5dAdDnTT7x5jbFjIvPUnTY'
 URL_SHEET = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv'
 
 AMAZON_TAG = "radarvip01-20"
-ML_TOOL_ID = "85456160"
-ML_CAMPAIGN = "RadarVIPBot"
 ALI_KEY = "_c3MIbod9"
 
 bot = telebot.TeleBot(TOKEN)
@@ -136,11 +134,11 @@ TEXTS = {
     }
 }
 
-# === 3. DICCIONARIO MAESTRO DE PAÍSES (REGLAS Y MONETIZACIÓN) ===
+# === 3. DICCIONARIO MAESTRO DE PAÍSES (REGLAS Y MONETIZACIÓN ESPECÍFICA) ===
 COUNTRY_CONFIG = {
     # --- AMÉRICA ---
-    'AR': {'name': 'Argentina', 'flag': '🇦🇷', 'lang': 'es', 'show_ml': True, 'ml_domain': 'com.ar', 'show_amz': False, 'show_ali': True, 'show_vip': True},
-    'CL': {'name': 'Chile', 'flag': '🇨🇱', 'lang': 'es', 'show_ml': True, 'ml_domain': 'cl', 'show_amz': True, 'show_ali': True, 'show_vip': False},
+    'AR': {'name': 'Argentina', 'flag': '🇦🇷', 'lang': 'es', 'show_ml': True, 'ml_domain': 'com.ar', 'ml_tool': '85456160', 'ml_camp': 'RadarVIPBot', 'show_amz': False, 'show_ali': True, 'show_vip': True},
+    'CL': {'name': 'Chile', 'flag': '🇨🇱', 'lang': 'es', 'show_ml': True, 'ml_domain': 'cl', 'ml_tool': '65347472', 'ml_camp': 'RadarVIPChile', 'show_amz': True, 'show_ali': True, 'show_vip': False},
     'UY': {'name': 'Uruguay', 'flag': '🇺🇾', 'lang': 'es', 'show_ml': False, 'ml_domain': '', 'show_amz': True, 'show_ali': True, 'show_vip': False},
     'PY': {'name': 'Paraguay', 'flag': '🇵🇾', 'lang': 'es', 'show_ml': False, 'ml_domain': '', 'show_amz': True, 'show_ali': True, 'show_vip': False},
     'CO': {'name': 'Colombia', 'flag': '🇨🇴', 'lang': 'es', 'show_ml': False, 'ml_domain': '', 'show_amz': True, 'show_ali': True, 'show_vip': False},
@@ -177,80 +175,60 @@ COUNTRY_CONFIG = {
     'GLOBAL': {'name': 'Global', 'flag': '🌍', 'lang': 'en', 'show_ml': False, 'ml_domain': '', 'show_amz': False, 'show_ali': True, 'show_vip': False}
 }
 
-# === 4. BIENVENIDA Y MENÚ DE CONTINENTES ===
+# === 4. BIENVENIDA Y MENÚ DESPLEGADO ===
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    markup = telebot.types.InlineKeyboardMarkup(row_width=1)
-    markup.add(
-        telebot.types.InlineKeyboardButton("🌎 América / America", callback_data="cont_america"),
-        telebot.types.InlineKeyboardButton("🌍 Europa / Europe", callback_data="cont_europa"),
-        telebot.types.InlineKeyboardButton("🌏 Asia & Oceanía", callback_data="cont_asia"),
-        telebot.types.InlineKeyboardButton("🌍 África / Africa", callback_data="cont_africa"),
-        telebot.types.InlineKeyboardButton("🌐 Resto del Mundo / Global", callback_data="set_GLOBAL")
-    )
+    markup = telebot.types.InlineKeyboardMarkup()
+    
+    # Agrupamos los botones en filas para que queden compactos en la pantalla
+    botones = [
+        telebot.types.InlineKeyboardButton("🇦🇷 AR", callback_data="set_AR"),
+        telebot.types.InlineKeyboardButton("🇨🇱 CL", callback_data="set_CL"),
+        telebot.types.InlineKeyboardButton("🇺🇾 UY", callback_data="set_UY"),
+        telebot.types.InlineKeyboardButton("🇵🇾 PY", callback_data="set_PY"),
+        telebot.types.InlineKeyboardButton("🇨🇴 CO", callback_data="set_CO"),
+        telebot.types.InlineKeyboardButton("🇵🇪 PE", callback_data="set_PE"),
+        telebot.types.InlineKeyboardButton("🇪🇨 EC", callback_data="set_EC"),
+        telebot.types.InlineKeyboardButton("🇲🇽 MX", callback_data="set_MX"),
+        telebot.types.InlineKeyboardButton("🇧🇷 BR", callback_data="set_BR"),
+        telebot.types.InlineKeyboardButton("🇺🇸 US", callback_data="set_US"),
+        telebot.types.InlineKeyboardButton("🇨🇦 CA", callback_data="set_CA"),
+        telebot.types.InlineKeyboardButton("🇪🇸 ES", callback_data="set_ES"),
+        telebot.types.InlineKeyboardButton("🇬🇧 UK", callback_data="set_UK"),
+        telebot.types.InlineKeyboardButton("🇩🇪 DE", callback_data="set_DE"),
+        telebot.types.InlineKeyboardButton("🇫🇷 FR", callback_data="set_FR"),
+        telebot.types.InlineKeyboardButton("🇮🇹 IT", callback_data="set_IT"),
+        telebot.types.InlineKeyboardButton("🇷🇺 RU", callback_data="set_RU"),
+        telebot.types.InlineKeyboardButton("🇸🇪 SE", callback_data="set_SE"),
+        telebot.types.InlineKeyboardButton("🇳🇴 NO", callback_data="set_NO"),
+        telebot.types.InlineKeyboardButton("🇫🇮 FI", callback_data="set_FI"),
+        telebot.types.InlineKeyboardButton("🇮🇳 IN", callback_data="set_IN"),
+        telebot.types.InlineKeyboardButton("🇯🇵 JP", callback_data="set_JP"),
+        telebot.types.InlineKeyboardButton("🇰🇷 KR", callback_data="set_KR"),
+        telebot.types.InlineKeyboardButton("🇹🇷 TR", callback_data="set_TR"),
+        telebot.types.InlineKeyboardButton("🇦🇺 AU", callback_data="set_AU"),
+        telebot.types.InlineKeyboardButton("🇿🇦 ZA", callback_data="set_ZA"),
+        telebot.types.InlineKeyboardButton("🇳🇬 NG", callback_data="set_NG"),
+        telebot.types.InlineKeyboardButton("🇪🇬 EG", callback_data="set_EG")
+    ]
+    
+    # Organizamos los botones en filas de 4
+    for i in range(0, len(botones), 4):
+        markup.row(*botones[i:i+4])
+    
+    # El botón Global ocupa una fila entera al final
+    markup.row(telebot.types.InlineKeyboardButton("🌍 GLOBAL", callback_data="set_GLOBAL"))
     
     bot.reply_to(
         message,
-        "👋😃 *¡Hola! Bienvenido a Radar VIP Global*\n"
-        "🌎 *Hello! Welcome to Radar VIP Global*\n\n"
-        "El buscador definitivo de oportunidades / The ultimate deal finder.\n"
-        "Para darte los precios exactos, selecciona tu región / Select your region:",
+        "LANGUAGE",
         reply_markup=markup,
         parse_mode="Markdown"
     )
 
-# === 5. NAVEGACIÓN A PAÍSES ===
-@bot.callback_query_handler(func=lambda call: call.data.startswith("cont_"))
-def show_countries(call):
-    continente = call.data.split("_")[1]
-    markup = telebot.types.InlineKeyboardMarkup(row_width=2)
-    
-    if continente == "america":
-        botones = [
-            ("🇦🇷 Argentina", "AR"), ("🇨🇱 Chile", "CL"), ("🇺🇾 Uruguay", "UY"), 
-            ("🇵🇾 Paraguay", "PY"), ("🇨🇴 Colombia", "CO"), ("🇵🇪 Perú", "PE"), 
-            ("🇪🇨 Ecuador", "EC"), ("🇧🇷 Brasil", "BR"), ("🇺🇸 USA", "US"), 
-            ("🇲🇽 México", "MX"), ("🇨🇦 Canadá", "CA")
-        ]
-    elif continente == "europa":
-        botones = [
-            ("🇪🇸 España", "ES"), ("🇬🇧 UK", "UK"), ("🇩🇪 Deutschland", "DE"), 
-            ("🇫🇷 France", "FR"), ("🇮🇹 Italia", "IT"), ("🇸🇪 Sverige", "SE"), 
-            ("🇳🇴 Norge", "NO"), ("🇫🇮 Suomi", "FI"), ("🇷🇺 Россия", "RU")
-        ]
-    elif continente == "asia":
-        botones = [
-            ("🇮🇳 India", "IN"), ("🇯🇵 日本", "JP"), ("🇰🇷 대한민국", "KR"), 
-            ("🇹🇷 Türkiye", "TR"), ("🇦🇺 Australia", "AU")
-        ]
-    elif continente == "africa":
-        botones = [
-            ("🇿🇦 South Africa", "ZA"), ("🇳🇬 Nigeria", "NG"), ("🇪🇬 مصر", "EG")
-        ]
-    
-    for i in range(0, len(botones), 2):
-        fila = [telebot.types.InlineKeyboardButton(botones[i][0], callback_data=f"set_{botones[i][1]}")]
-        if i + 1 < len(botones):
-            fila.append(telebot.types.InlineKeyboardButton(botones[i+1][0], callback_data=f"set_{botones[i+1][1]}"))
-        markup.row(*fila)
-        
-    markup.row(telebot.types.InlineKeyboardButton("🔙 Volver / Back", callback_data="back_start"))
-
-    bot.edit_message_text(
-        "📍 *Selecciona tu país específico / Select your country:*",
-        call.message.chat.id,
-        call.message.message_id,
-        reply_markup=markup,
-        parse_mode="Markdown"
-    )
-
-# === 6. ASIGNACIÓN DEL PAÍS ===
-@bot.callback_query_handler(func=lambda call: call.data == "back_start" or call.data.startswith("set_"))
+# === 5. ASIGNACIÓN DEL PAÍS ===
+@bot.callback_query_handler(func=lambda call: call.data.startswith("set_"))
 def set_country(call):
-    if call.data == "back_start":
-        send_welcome(call.message)
-        return
-
     pais_code = call.data.split("_")[1]
     
     if pais_code in COUNTRY_CONFIG:
@@ -262,13 +240,13 @@ def set_country(call):
         mensaje_ok = t['configured'].format(name=config['name'], flag=config['flag'])
         bot.edit_message_text(mensaje_ok, call.message.chat.id, call.message.message_id, parse_mode="Markdown")
 
-# === 7. MOTOR DE BÚSQUEDA Y MONETIZACIÓN ===
+# === 6. MOTOR DE BÚSQUEDA Y MONETIZACIÓN ===
 @bot.message_handler(func=lambda message: True)
 def handle_search(message):
     chat_id = message.chat.id
 
     if chat_id not in user_data:
-        bot.reply_to(message, "⚠️ Por favor, usa /start para seleccionar tu país primero.")
+        bot.reply_to(message, "⚠️ LANGUAGE", reply_markup=None) 
         return
 
     pais_code = user_data[chat_id]['pais']
@@ -320,7 +298,9 @@ def handle_search(message):
         
         if config['show_ml']:
             dominio = config['ml_domain']
-            res += f"{t['ml']}(https://listado.mercadolibre.{dominio}/{query_url_ml}?matt_tool={ML_TOOL_ID}&matt_word={ML_CAMPAIGN})\n"
+            tool_id = config['ml_tool']
+            camp = config['ml_camp']
+            res += f"{t['ml']}(https://listado.mercadolibre.{dominio}/{query_url_ml}?matt_tool={tool_id}&matt_word={camp})\n"
             
         if config['show_amz']:
             res += f"{t['amz']}(https://www.amazon.com/s?k={query_url_amz}&tag={AMAZON_TAG})\n"
@@ -337,7 +317,7 @@ def handle_search(message):
         print("ERROR:", e)
         bot.edit_message_text(t['error_conn'], chat_id, msg_buscando.message_id)
 
-# === 8. RUN ===
-print("🔥 RADAR VIP ESTÁ EN LÍNEA: MODO MULTILINGÜE MUNDIAL ACTIVADO...")
+# === 7. RUN ===
+print("🔥 RADAR VIP ESTÁ EN LÍNEA: MENÚ COMPACTO ACTIVADO...")
 bot.remove_webhook()
 bot.polling(none_stop=True)
