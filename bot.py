@@ -1,120 +1,86 @@
-import os
-import telebot
-import requests
-import csv
-import urllib.parse
-import re
+import os, telebot, requests, csv, re, urllib.parse
 from io import StringIO
 
-# === CONFIGURACIÓN ===
 TOKEN = os.environ.get('TOKEN')
 SHEET_ID = '1zGZF5meVfgRZvRLSvKGelwYs2h3pgA7YEpC_1xj9cTk'
 URL_SHEET = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv'
 
-AMAZON_TAG = "radarvip01-20"
-ALI_KEY = "_c3MIbod9"
-
 bot = telebot.TeleBot(TOKEN)
 user_data = {}
 
-# --- FUNCIÓN DE LIMPIEZA QUIRÚRGICA ---
-def limpiar_texto(t):
-    # Quita saltos de línea, comillas y espacios sobrantes
-    return t.replace('\n', ' ').replace('"', '').strip()
-
-def extraer_url(texto):
-    # Busca una URL que empiece con http o https y termina donde hay un espacio o fin de línea
-    match = re.search(r'(https?://[^\s]+)', texto)
-    return match.group(0) if match else None
-
-def obtener_datos_limpios():
+def obtener_datos():
     try:
-        r = requests.get(URL_SHEET)
+        r = requests.get(URL_SHEET, timeout=10)
         r.encoding = 'utf-8'
-        raw_data = r.text
-        
-        # Leemos el CSV
-        reader = csv.reader(StringIO(raw_data))
-        filas_limpias = []
-        
-        for fila in reader:
-            # Limpiamos CADA celda de la fila apenas entra
-            nueva_fila = [limpiar_texto(celda) for celda in fila]
-            if len(nueva_fila) >= 3:
-                filas_limpias.append(nueva_fila)
-        return filas_limpias
-    except Exception as e:
-        print(f"Error lectura: {e}")
-        return []
+        return list(csv.reader(StringIO(r.text)))
+    except: return []
 
-# === COMANDOS ===
 @bot.message_handler(commands=['start'])
 def welcome(message):
     markup = telebot.types.InlineKeyboardMarkup(row_width=2)
     btns = [
-        telebot.types.InlineKeyboardButton("🇦🇷 AR", callback_data="set_AR"),
-        telebot.types.InlineKeyboardButton("🇺🇾 UY", callback_data="set_UY"),
-        telebot.types.InlineKeyboardButton("🇨🇱 CL", callback_data="set_CL"),
-        telebot.types.InlineKeyboardButton("🌍 GLOBAL", callback_data="set_GLOBAL")
+        telebot.types.InlineKeyboardButton("🇦🇷 AR", callback_data="s_AR"),
+        telebot.types.InlineKeyboardButton("🇺🇾 UY", callback_data="s_UY"),
+        telebot.types.InlineKeyboardButton("🇨🇱 CL", callback_data="s_CL")
     ]
     markup.add(*btns)
-    bot.reply_to(message, "🚀 *RADAR VIP GLOBAL*\nSeleccioná tu país:", parse_mode="Markdown", reply_markup=markup)
+    bot.reply_to(message, "🚀 *RADAR VIP GLOBAL*\nSeleccioná tu país, paisano:", parse_mode="Markdown", reply_markup=markup)
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("set_"))
-def callback_pais(call):
-    pais = call.data.split("_")[1]
-    user_data[call.message.chat.id] = pais
-    bot.edit_message_text(f"✅ *{pais}* activado. ¿Qué buscás?", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+@bot.callback_query_handler(func=lambda call: call.data.startswith("s_"))
+def set_p(call):
+    user_data[call.message.chat.id] = call.data.split("_")[1]
+    bot.answer_callback_query(call.id)
+    bot.send_message(call.message.chat.id, "🔎 *¿Qué estás buscando?* (ej: autos, bicis, pescar)", parse_mode="Markdown")
 
-# === BÚSQUEDA CON INTENCIÓN ===
 @bot.message_handler(func=lambda message: True)
 def buscar(message):
-    chat_id = message.chat.id
-    if chat_id not in user_data: return welcome(message)
-
-    pais_user = user_data[chat_id]
-    busqueda_usuario = message.text.lower().strip()
+    uid = message.chat.id
+    if uid not in user_data: return
     
-    bot.send_chat_action(chat_id, 'typing')
-    excel_data = obtener_datos_limpios()
-    
-    encontrados = []
+    pais = user_data[uid]
+    busqueda = message.text.lower().strip()
+    data = obtener_datos()
+    res = []
 
-    for fila in excel_data:
-        # Fila[0]=Pais, Fila[1]=Nombre/Seccion, Fila[2]=Plataforma, Fila[3]=Link...
-        iso = fila[0].upper()
-        nombre_item = fila[1].lower()
-        plataforma = fila[2].lower()
-        
-        # Chequeamos si el país coincide
-        if iso == pais_user or iso == "GLOBAL":
-            # Buscamos la palabra en el Nombre o en la Plataforma
-            if busqueda_usuario in nombre_item or busqueda_usuario in plataforma:
-                # Buscamos un link real en toda la fila por las dudas
-                url_final = None
-                for celda in fila:
-                    url_final = extraer_url(celda)
-                    if url_final: break
+    for fila in data:
+        # Unificamos la fila y limpiamos saltos de línea para buscar bien
+        texto_fila = " ".join(fila).lower().replace('\n', ' ')
+        iso_fila = fila[0].strip().upper()
+
+        if (iso_fila == pais or iso_fila == "GLOBAL") and busqueda in texto_fila:
+            # Extraer el link limpio
+            link = None
+            for celda in fila:
+                m = re.search(r'(https?://[^\s\n]+)', celda)
+                if m: 
+                    link = m.group(0)
+                    break
+            
+            if link:
+                # Prioridad 1 tiene emoji de fuego
+                prio = "🔥" if "1" in " ".join(fila[4:]) else "💎"
                 
-                if url_final:
-                    # Detectar prioridad
-                    es_vip = any("1" in c for c in fila[4:]) if len(fila) > 4 else False
-                    icono = "🔥" if es_vip else "💎"
-                    
-                    # Formatear nombre para que no sea gigante
-                    nombre_corto = fila[1][:50] + "..." if len(fila[1]) > 53 else fila[1]
-                    encontrados.append(f"{icono} *{fila[2]}* - [{nombre_corto}]({url_final})")
+                # LIMPIEZA DEL NOMBRE:
+                # Tomamos la columna 1, le sacamos los saltos de línea y el link si está ahí metido
+                nombre_sucio = fila[1].replace('\n', ' ').strip()
+                nombre_limpio = re.sub(r'https?://[^\s]+', '', nombre_sucio).strip()
+                # Si el nombre quedó vacío o muy corto, usamos la plataforma (columna 2)
+                if len(nombre_limpio) < 3 and len(fila) > 2:
+                    nombre_limpio = fila[2].strip()
 
-    if encontrados:
-        res = f"🎯 *Resultados para:* _{busqueda_usuario}_\n\n" + "\n".join(list(set(encontrados))[:10])
+                res.append(f"{prio} [{nombre_limpio}]({link})")
+
+    if res:
+        # Quitamos duplicados y armamos lista limpia
+        final_list = list(dict.fromkeys(res))[:12]
+        txt = f"🎯 *Resultados para:* _{busqueda}_\n\n" + "\n".join(final_list)
     else:
-        # Si falla el Excel, Amazon/AliExpress
-        q_url = urllib.parse.quote(busqueda_usuario)
-        res = f"🎯 No hay secciones exactas para '{busqueda_usuario}'.\nPruebe búsqueda mundial:\n\n"
-        res += f"🛒 [Amazon](https://www.amazon.com/s?k={q_url}&tag={AMAZON_TAG})\n"
-        res += f"🛍️ [AliExpress](https://s.click.aliexpress.com/deep_link.htm?aff_short_key={ALI_KEY}&dl_target_url=https://www.aliexpress.com/wholesale?SearchText={q_url})"
+        q = urllib.parse.quote(busqueda)
+        txt = f"❌ No encontré '{busqueda}' en el radar local.\n\nPrueba en los mercados mundiales:\n\n"
+        txt += f"🛒 [Amazon Global](https://www.amazon.com/s?k={q}&tag=radarvip01-20)\n"
+        txt += f"🛍️ [AliExpress](https://s.click.aliexpress.com/deep_link.htm?aff_short_key=_c3MIbod9&dl_target_url=https://www.aliexpress.com/wholesale?SearchText={q})"
 
-    bot.send_message(chat_id, res, parse_mode="Markdown", disable_web_page_preview=True)
+    bot.send_message(uid, txt, parse_mode="Markdown", disable_web_page_preview=True)
 
 if __name__ == "__main__":
     bot.remove_webhook()
