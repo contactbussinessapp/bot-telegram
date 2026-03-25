@@ -3,38 +3,48 @@ import telebot
 import requests
 import csv
 import urllib.parse
+import re
 from io import StringIO
 
-# ==========================================
-# 1. CONFIGURACIÓN (SIMPLE Y DIRECTA)
-# ==========================================
+# === 1. CONFIGURACIÓN ===
 TOKEN = os.environ.get('TOKEN')
 SHEET_ID = '1zGZF5meVfgRZvRLSvKGelwYs2h3pgA7YEpC_1xj9cTk'
 URL_SHEET = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv'
 
-# Tus IDs de Afiliado para búsquedas cuando no hay coincidencia exacta
 AMAZON_TAG = "radarvip01-20"
 ALI_KEY = "_c3MIbod9"
 
 bot = telebot.TeleBot(TOKEN)
 user_data = {}
 
-# ==========================================
-# 2. FUNCIÓN DE LECTURA DE BASE DE DATOS
-# ==========================================
-def obtener_datos_excel():
+# === 2. DICCIONARIO DE SINÓNIMOS (ADAPTACIÓN REGIONAL) ===
+# Esto permite que si buscan "chata", el bot entienda que es "auto/camioneta"
+SINONIMOS = {
+    "auto": ["carro", "coche", "automovil", "chata", "camioneta", "troca", "vehiculo", "nave"],
+    "bici": ["bicicleta", "cicla", "chiva", "btt", "mountain bike"],
+    "celu": ["telefono", "celular", "smartphone", "movil", "iphone", "android"],
+    "compu": ["computadora", "ordenador", "laptop", "notebook", "pc"],
+    "ropa": ["indumentaria", "vestimenta", "pilcha", "trapo", "prenda"]
+}
+
+def normalizar_busqueda(texto):
+    texto = texto.lower().strip()
+    # Si el usuario usa un modismo, lo traducimos a la palabra clave del Excel
+    for clave, variaciones in SINONIMOS.items():
+        if texto in variaciones or any(v in texto for v in variaciones):
+            return clave
+    return texto
+
+# === 3. FUNCIÓN DE LECTURA ===
+def obtener_datos():
     try:
         r = requests.get(URL_SHEET)
         r.encoding = 'utf-8'
-        # Convertimos el CSV en una lista para procesar
-        return list(csv.reader(StringIO(r.text)))
-    except Exception as e:
-        print(f"Error al leer Excel: {e}")
+        return list(csv.reader(StringIO(r.text.replace('\r', ''))))
+    except:
         return []
 
-# ==========================================
-# 3. COMANDOS DE INICIO Y PAÍS
-# ==========================================
+# === 4. COMANDOS DE INICIO ===
 @bot.message_handler(commands=['start'])
 def welcome(message):
     markup = telebot.types.InlineKeyboardMarkup(row_width=2)
@@ -45,76 +55,65 @@ def welcome(message):
         telebot.types.InlineKeyboardButton("🌍 GLOBAL", callback_data="set_GLOBAL")
     ]
     markup.add(*btns)
-    bot.reply_to(message, "🚀 *RADAR VIP GLOBAL*\nSelecciona tu país para rastrear ofertas:", parse_mode="Markdown", reply_markup=markup)
+    bot.reply_to(message, "🚀 *RADAR VIP GLOBAL*\n¿Desde dónde nos escribís, paisano?", parse_mode="Markdown", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("set_"))
 def callback_pais(call):
     pais = call.data.split("_")[1]
     user_data[call.message.chat.id] = pais
-    bot.edit_message_text(f"✅ Configurado para *{pais}*.\n¿Qué producto estás buscando hoy?", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+    bot.edit_message_text(f"✅ *{pais}* activado. ¡Mandale sin miedo! ¿Qué estás buscando?", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
 
-# ==========================================
-# 4. MOTOR DE BÚSQUEDA Y PRIORIDADES
-# ==========================================
+# === 5. MOTOR DE BÚSQUEDA ADAPTATIVO ===
 @bot.message_handler(func=lambda message: True)
 def buscar(message):
     chat_id = message.chat.id
-    if chat_id not in user_data:
-        return welcome(message)
+    if chat_id not in user_data: return welcome(message)
 
     pais_user = user_data[chat_id]
-    query = message.text.lower().strip()
+    entrada_usuario = message.text.lower().strip()
+    query_raiz = normalizar_busqueda(entrada_usuario)
     
-    msg_espera = bot.send_message(chat_id, "🔍 *Escaneando secciones VIP...*", parse_mode="Markdown")
+    bot.send_chat_action(chat_id, 'typing')
+    excel_data = obtener_datos()
     
-    excel_data = obtener_datos_excel()
-    p1 = [] # Prioridad 1 (Tuyo / Emidica / Dropshipping)
-    p2 = [] # Prioridad 2 (Afiliados locales)
+    resultados_vip = []
+    resultados_otros = []
 
-    # El bot recorre el Excel buscando coincidencias
     for fila in excel_data:
         if len(fila) < 4: continue
         
-        iso_excel = fila[0].strip().upper()
-        nombre_item = fila[1].strip().lower()
+        # Datos del Excel (limpios de espacios)
+        iso = fila[0].strip().upper()
+        nombre_seccion = fila[1].strip()
         plataforma = fila[2].strip()
-        url = fila[3].strip()
-        # La prioridad suele estar en la columna 5 (índice 4)
+        link = fila[3].strip()
         prioridad = fila[4].strip() if len(fila) > 4 else "2"
 
-        # Si el país coincide o es una oferta global
-        if iso_excel == pais_user or iso_excel == "GLOBAL":
-            # Si el término de búsqueda está en el nombre de la sección/producto
-            if query in nombre_item:
-                link_txt = f"💎 *{plataforma}* - [{fila[1].strip()}]({url})"
-                if prioridad == "1":
-                    p1.append(link_txt)
+        if iso == pais_user or iso == "GLOBAL":
+            # Buscamos si la raíz de la búsqueda está en el nombre del Excel
+            if query_raiz in nombre_seccion.lower() or entrada_usuario in nombre_seccion.lower():
+                item = f"💎 *{plataforma}* - [{nombre_seccion}]({link})"
+                if "1" in prioridad:
+                    resultados_vip.append(item)
                 else:
-                    p2.append(link_txt)
+                    resultados_otros.append(item)
 
-    # CONSTRUCCIÓN DE LA RESPUESTA FINAL
-    respuesta = f"🎯 *Resultados para:* _{query}_\n\n"
-    
-    if p1:
-        respuesta += "🔥 *OFERTAS VIP PRIORITARIAS:*\n" + "\n".join(p1) + "\n\n"
-    
-    if p2:
-        respuesta += "🌐 *SECCIONES RECOMENDADAS:*\n" + "\n".join(p2) + "\n\n"
+    # RESPUESTA FINAL
+    if resultados_vip or resultados_otros:
+        res = f"🎯 *Radar para:* _{entrada_usuario}_\n\n"
+        if resultados_vip:
+            res += "🔥 *OFERTAS TOP:*\n" + "\n".join(resultados_vip) + "\n\n"
+        if resultados_otros:
+            res += "🌐 *MÁS OPCIONES:*\n" + "\n".join(resultados_otros)
+    else:
+        # Si no hay nada, mandamos a los buscadores con la palabra original
+        q_url = urllib.parse.quote(entrada_usuario)
+        res = f"🎯 No encontré '{entrada_usuario}' en el radar local, pero chequeá estos precios mundiales:\n\n"
+        res += f"🛒 [Amazon Global](https://www.amazon.com/s?k={q_url}&tag={AMAZON_TAG})\n"
+        res += f"🛍️ [AliExpress Ofertas](https://s.click.aliexpress.com/deep_link.htm?aff_short_key={ALI_KEY}&dl_target_url=https://www.aliexpress.com/wholesale?SearchText={q_url})"
 
-    # Si el Excel no tiene nada específico, activamos los buscadores mundiales
-    if not p1 and not p2:
-        q_clean = urllib.parse.quote(query)
-        respuesta += "No hay una sección exacta en el radar, pero aquí tienes los mejores precios:\n\n"
-        respuesta += f"🛒 [Buscar en Amazon](https://www.amazon.com/s?k={q_clean}&tag={AMAZON_TAG})\n"
-        respuesta += f"🛍️ [Buscar en AliExpress](https://s.click.aliexpress.com/deep_link.htm?aff_short_key={ALI_KEY}&dl_target_url=https://www.aliexpress.com/wholesale?SearchText={q_clean})"
+    bot.send_message(chat_id, res, parse_mode="Markdown", disable_web_page_preview=True)
 
-    bot.edit_message_text(respuesta, chat_id, msg_espera.message_id, parse_mode="Markdown", disable_web_page_preview=True)
-
-# ==========================================
-# 5. LANZAMIENTO SEGURO
-# ==========================================
 if __name__ == "__main__":
-    # Limpiamos cualquier rastro anterior en la API de Telegram
     bot.remove_webhook()
-    print("🔥 RADAR VIP GLOBAL ESTÁ EN LÍNEA...")
     bot.polling(none_stop=True)
