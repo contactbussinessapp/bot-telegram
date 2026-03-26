@@ -30,21 +30,19 @@ def safe_get(datos, indices):
 
 # -------- BUSCADOR --------
 def buscar_productos(datos, idxs, query):
-    query_words = query.lower().split()
+    palabras = query.lower().split()
 
     resultados = []
     relacionados = []
 
     for i in idxs:
-        if i >= len(datos): continue
+        if i >= len(datos):
+            continue
+
         item = datos[i]
+        texto = (str(item.get('Producto','')) + " " + str(item.get('Keywords',''))).lower()
 
-        texto = (
-            str(item.get('Producto','')) + " " +
-            str(item.get('Keywords',''))
-        ).lower()
-
-        score = sum(1 for q in query_words if q in texto)
+        score = sum(1 for p in palabras if p in texto)
 
         if score > 0:
             resultados.append((score, item))
@@ -78,8 +76,8 @@ async def seleccionar_pais(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if 'AR' in op:
         context.user_data['p'] = 'AR'
-
         ofertas = safe_get(datos, range(1,8))
+
         msg = "🇦🇷 *OPORTUNIDADES DEL DÍA*\n\n"
         for r in ofertas:
             msg += f"🔥 *{r['Producto']}*\n🔗 {r['Link']}\n\n"
@@ -89,7 +87,6 @@ async def seleccionar_pais(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif 'CL' in op:
         context.user_data['p'] = 'CL'
-
         idxs = list(range(97,185)) + [186]
         azar = random.sample(safe_get(datos, idxs), 3)
 
@@ -102,7 +99,6 @@ async def seleccionar_pais(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif 'UY' in op:
         context.user_data['p'] = 'UY'
-
         idxs = [185,186]
         azar = random.sample(safe_get(datos, idxs), 2)
 
@@ -115,7 +111,6 @@ async def seleccionar_pais(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     else:
         context.user_data['p'] = 'GL'
-
         idxs = [186]
         globales = safe_get(datos, idxs)
 
@@ -161,7 +156,7 @@ async def ejecutar_busqueda(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     return EN_BUSQUEDA
 
-# -------- MAIN (FIX PYTHON 3.14) --------
+# -------- MAIN COMPATIBLE RENDER + PYTHON 3.14 --------
 async def main():
     app = Application.builder().token(TOKEN).build()
 
@@ -177,7 +172,16 @@ async def main():
     app.add_handler(conv)
 
     print("🚀 Radar VIP corriendo...")
-    await app.run_polling(drop_pending_updates=True)
+
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+
+    # Mantener vivo el bot
+    while True:
+        await asyncio.sleep(3600)
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    loop = asyncio.get_event_loop()
+    loop.create_task(main())
+    loop.run_forever()
