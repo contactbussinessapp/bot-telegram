@@ -1,76 +1,144 @@
-import logging, random, os, requests, csv
-from io import StringIO
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler,
-    filters, ContextTypes, ConversationHandler
-)
+import telebot
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+import pandas as pd
+import os
 
-# -------- CONFIG --------
-CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSU00GJR_bjeMwu_2SdaU_Lrym18DZYQKYA0-uW7mzw_2KMbcNYfCAD34mLjHZpKRZH3oOviud0agl3/pub?gid=0&single=true&output=csv"
-TOKEN = os.getenv("TELEGRAM_TOKEN")
+# Token de tu bot (Render lo lee de las variables de entorno)
+TOKEN = os.environ.get('TELEGRAM_TOKEN')
+bot = telebot.TeleBot(TOKEN)
 
-SELECCION_PAIS, EN_BUSQUEDA = range(2)
-logging.basicConfig(level=logging.INFO)
+# Enlace de tu Google Sheet (exportado a CSV para lectura ultra rápida)
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1zGZF5meVfgRZvRLSvKGelwYs2h3pgA7YEpC_1xj9cTk/export?format=csv"
 
-# -------- DATA --------
-def obtener_datos():
+# Diccionario para recordar qué país eligió cada usuario
+user_state = {}
+
+def get_data():
+    """Lee el Google Sheet en tiempo real"""
     try:
-        r = requests.get(CSV_URL, timeout=10)
-        f = StringIO(r.content.decode('utf-8'))
-        return list(csv.DictReader(f))
-    except:
-        return []
+        df = pd.read_csv(SHEET_URL)
+        df.fillna('', inplace=True)
+        return df
+    except Exception as e:
+        print(f"Error leyendo el Sheet: {e}")
+        return pd.DataFrame()
 
-# -------- BOT --------
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    botones = [['🇦🇷 AR', '🇨🇱 CL'], ['🇺🇾 UY', '🌎 GLOBAL']]
-    await update.message.reply_text(
-        "RADAR VIP GLOBAL\n¿Desde dónde nos visitas?",
-        reply_markup=ReplyKeyboardMarkup(botones, resize_keyboard=True)
+@bot.message_handler(commands=['start', 'help'])
+def send_welcome(message):
+    """Paso 1: Muestra las banderas y pregunta el origen"""
+    markup = InlineKeyboardMarkup()
+    markup.row_width = 2
+    markup.add(
+        InlineKeyboardButton("🇦🇷 Argentina", callback_data="loc_AR"),
+        InlineKeyboardButton("🇨🇱 Chile", callback_data="loc_CL"),
+        InlineKeyboardButton("🇺🇾 Uruguay", callback_data="loc_UY"),
+        InlineKeyboardButton("🌍 Resto de Latam/USA/Global", callback_data="loc_GLOBAL")
     )
-    return SELECCION_PAIS
+    bot.send_message(message.chat.id, "¡Hola! Bienvenido a Radar VIP. 🚀\nPor favor, selecciona tu país/región:", reply_markup=markup)
 
-async def seleccionar_pais(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['p'] = update.message.text
-    await update.message.reply_text("OK. ¿Qué estás buscando?")
-    return EN_BUSQUEDA
+@bot.callback_query_handler(func=lambda call: call.data.startswith('loc_'))
+def handle_location(call):
+    """Paso 2 al 5: Entrega la oferta inicial según el país"""
+    loc = call.data.split('_')[1]
+    user_state[call.message.chat.id] = loc
+    df = get_data()
+    
+    if df.empty:
+        bot.send_message(call.message.chat.id, "Error de conexión con la base de datos. Intenta nuevamente más tarde.")
+        return
 
-async def buscar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    datos = obtener_datos()
-    query = update.message.text.lower()
+    # Filtramos la base de datos por país usando la columna "Pais (ISO)"
+    df_ar = df[df['Pais (ISO)'] == 'AR']
+    df_cl = df[df['Pais (ISO)'] == 'CL']
+    df_uy = df[df['Pais (ISO)'] == 'UY']
+    df_global = df[df['Pais (ISO)'].isin(['AM-INT', 'GLOBAL'])]
+    
+    bot.answer_callback_query(call.id)
+    
+    if loc == 'AR':
+        oportunidades = df_ar.head(7)
+        resp = "🇦🇷 **Oportunidades del Día** 🇦🇷\n\n"
+        for _, row in oportunidades.iterrows():
+            resp += f"🔹 [{row['Producto o Sección']}]({row['Link']})\n"
+        resp += "\n¿Qué estás buscando hoy? (Escribí tu consulta)"
+        
+    elif loc == 'CL':
+        scope = pd.concat([df_cl, df_global])
+        random_items = scope.sample(n=min(5, len(scope)))
+        resp = "🇨🇱 **Te podría interesar** 🇨🇱\n\n"
+        for _, row in random_items.iterrows():
+            resp += f"🔹 [{row['Producto o Sección']}]({row['Link']})\n"
+        resp += "\n¿Qué estás buscando? (Escribe tu consulta)"
 
-    resultados = []
-    for d in datos:
-        texto = (d.get('Producto','') + d.get('Keywords','')).lower()
-        if query in texto:
-            resultados.append(d)
+    elif loc == 'UY':
+        scope = pd.concat([df_uy, df_global])
+        random_items = scope.sample(n=min(3, len(scope)))
+        resp = "🇺🇾 **Productos Destacados** 🇺🇾\n\n"
+        for _, row in random_items.iterrows():
+            resp += f"🔹 [{row['Producto o Sección']}]({row['Link']})\n"
+        resp += "\n¿Qué andás buscando, bo? (Escribí tu consulta)"
 
-    if resultados:
-        for r in resultados[:5]:
-            await update.message.reply_text(f"{r['Producto']}\n{r['Link']}")
+    elif loc == 'GLOBAL':
+        scope = df_global
+        random_items = scope.sample(n=min(3, len(scope)))
+        resp = "🌍 **Top Picks / Mejores Opciones** 🌍\n\n"
+        for _, row in random_items.iterrows():
+            resp += f"🔹 [{row['Producto o Sección']}]({row['Link']})\n"
+        resp += "\n¿Qué buscas? / What are you looking for?"
+
+    bot.send_message(call.message.chat.id, resp, parse_mode='Markdown', disable_web_page_preview=True)
+
+@bot.message_handler(func=lambda message: True)
+def handle_search(message):
+    """Busca en la columna Keywords basándose en el país elegido"""
+    chat_id = message.chat.id
+    if chat_id not in user_state:
+        send_welcome(message)
+        return
+        
+    loc = user_state[chat_id]
+    query = message.text.lower()
+    df = get_data()
+    
+    df_ar = df[df['Pais (ISO)'] == 'AR']
+    df_cl = df[df['Pais (ISO)'] == 'CL']
+    df_uy = df[df['Pais (ISO)'] == 'UY']
+    df_global = df[df['Pais (ISO)'].isin(['AM-INT', 'GLOBAL'])]
+    
+    if loc == 'AR':
+        scope = pd.concat([df_ar, df_global])
+    elif loc == 'CL':
+        scope = pd.concat([df_cl, df_global])
+    elif loc == 'UY':
+        scope = pd.concat([df_uy, df_global])
     else:
-        await update.message.reply_text("No encontré resultados.")
+        scope = df_global
 
-    return EN_BUSQUEDA
+    def match_score(row):
+        # Buscamos coincidencias en la columna D (Keywords)
+        keywords_str = str(row['Keywords'])
+        keywords = [k.strip().lower() for k in keywords_str.split(',')]
+        query_words = query.split()
+        # Cuenta cuántas palabras de la búsqueda del usuario están en las keywords
+        score = sum(1 for q in query_words if any(q in k for k in keywords))
+        return score
 
-# -------- MAIN --------
-def main():
-    app = ApplicationBuilder().token(TOKEN).build()
+    scope['score'] = scope.apply(match_score, axis=1)
+    matches = scope[scope['score'] > 0].sort_values(by='score', ascending=False)
+    
+    if matches.empty:
+        bot.send_message(chat_id, "No encontré resultados exactos. Intenta con otras palabras o navegá por los enlaces anteriores.")
+        return
+        
+    top_matches = matches.head(5)
+    
+    resp = "🔍 **Aquí tienes los resultados y sugerencias relacionadas:**\n\n"
+    for _, row in top_matches.iterrows():
+        resp += f"✅ [{row['Producto o Sección']}]({row['Link']})\n"
+        
+    bot.send_message(chat_id, resp, parse_mode='Markdown', disable_web_page_preview=True)
 
-    conv = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
-        states={
-            SELECCION_PAIS: [MessageHandler(filters.TEXT & ~filters.COMMAND, seleccionar_pais)],
-            EN_BUSQUEDA: [MessageHandler(filters.TEXT & ~filters.COMMAND, buscar)],
-        },
-        fallbacks=[CommandHandler('start', start)]
-    )
-
-    app.add_handler(conv)
-
-    print("BOT FUNCIONANDO")
-    app.run_polling()
-
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    print("Iniciando Radar VIP en Background Worker...")
+    # Polling infinito sin que se corte
+    bot.infinity_polling(skip_pending=True)
