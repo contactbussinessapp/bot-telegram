@@ -1,145 +1,73 @@
-import logging
-import random
-import os
-import requests
-import csv
+import logging, random, os, requests, csv
 from io import StringIO
 from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 
-# --- CONFIGURACIÓN ---
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSU00GJR_bjeMwu_2SdaU_Lrym18DZYQKYA0-uW7mzw_2KMbcNYfCAD34mLjHZpKRZH3oOviud0agl3/pub?gid=0&single=true&output=csv"
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-# Estados de la conversación
 SELECCION_PAIS, EN_BUSQUEDA = range(2)
-
 logging.basicConfig(level=logging.INFO)
 
 def obtener_datos():
     try:
-        response = requests.get(CSV_URL)
-        f = StringIO(response.content.decode('utf-8'))
-        reader = csv.DictReader(f)
-        return list(reader)
-    except:
-        return None
+        r = requests.get(CSV_URL)
+        f = StringIO(r.content.decode('utf-8'))
+        return list(csv.DictReader(f))
+    except: return None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Paso 1: Pregunta origen con Banderas"""
     botones = [['🇦🇷 AR', '🇨🇱 CL'], ['🇺🇾 UY', '🌎 GLOBAL']]
-    await update.message.reply_text(
-        "✨ **RADAR VIP GLOBAL** ✨\n\n¿Desde dónde nos visitas hoy?",
-        parse_mode='Markdown',
-        reply_markup=ReplyKeyboardMarkup(botones, resize_keyboard=True, one_time_keyboard=True)
-    )
+    await update.message.reply_text("✨ **RADAR VIP GLOBAL** ✨\n¿De dónde vienes?", 
+        reply_markup=ReplyKeyboardMarkup(botones, resize_keyboard=True), parse_mode='Markdown')
     return SELECCION_PAIS
 
 async def seleccionar_pais(update: Update, context: ContextTypes.DEFAULT_TYPE):
     datos = obtener_datos()
-    if not datos:
-        await update.message.reply_text("Error de conexión con la base de datos.")
-        return ConversationHandler.END
-
-    opcion = update.message.text
-    
-    # --- 2. LÓGICA ARGENTINA (Filas 2 a 8 = index 0 a 6) ---
-    if 'AR' in opcion:
-        context.user_data['pais'] = 'AR'
-        # 2.1 Oportunidades del día (F2 a F8)
-        oportunidades = datos[0:7]
-        msg = "🇦🇷 **OPORTUNIDADES DEL DÍA (AR)** 🇦🇷\n\n"
-        for r in oportunidades:
-            msg += f"🔥 {r.get('Producto')}\n🔗 {r.get('Link')}\n\n"
+    op = update.message.text.upper()
+    if 'AR' in op:
+        context.user_data['p'] = 'AR'
+        msg = "🇦🇷 **OPORTUNIDADES (AR)**\n\n"
+        for r in datos[0:7]: msg += f"🔥 {r['Producto']}\n🔗 {r['Link']}\n\n"
         await update.message.reply_text(msg, parse_mode='Markdown')
-        await update.message.reply_text("¿Qué andás buscando, che? Decime y te lo encuentro.")
-
-    # --- 3. LÓGICA CHILE (Filas 98 a 185 = index 96 a 183) ---
-    elif 'CL' in opcion:
-        context.user_data['pais'] = 'CL'
-        # 3.1 Productos al azar (F98-185 + F187-188)
-        rango_cl = list(range(96, 184)) + [185, 186]
-        azar = [datos[i] for i in random.sample(rango_cl, 3)]
-        msg = "🇨🇱 **DESTACADOS CHILE** 🇨🇱\n\n"
-        for r in azar:
-            msg += f"✨ {r.get('Producto')}\n🔗 {r.get('Link')}\n\n"
+        await update.message.reply_text("¿Qué andás buscando, che?")
+    elif 'CL' in op:
+        context.user_data['p'] = 'CL'
+        msg = "🇨🇱 **DESTACADOS CHILE**\n\n"
+        for r in [datos[i] for i in random.sample(range(96, 184), 3)]: msg += f"✨ {r['Producto']}\n🔗 {r['Link']}\n\n"
         await update.message.reply_text(msg, parse_mode='Markdown')
-        await update.message.reply_text("¿Qué buscái hoy? Dime qué necesitái y te ayudo al tiro.")
-
-    # --- 4. LÓGICA URUGUAY (Fila 186 = index 184) ---
-    elif 'UY' in opcion:
-        context.user_data['pais'] = 'UY'
-        # 4.1 Productos al azar (F186 + F187-188)
-        rango_uy = [184, 185, 186]
-        azar = [datos[i] for i in random.sample(rango_uy, 2)]
-        msg = "🇺🇾 **SUGERENCIAS URUGUAY** 🇺🇾\n\n"
-        for r in azar:
-            msg += f"🇺🇾 {r.get('Producto')}\n🔗 {r.get('Link')}\n\n"
+        await update.message.reply_text("¿Qué buscái hoy, po?")
+    elif 'UY' in op:
+        context.user_data['p'] = 'UY'
+        msg = "🇺🇾 **SUGERENCIAS URUGUAY**\n\n"
+        for r in [datos[184], datos[185], datos[186]]: msg += f"🇺🇾 {r['Producto']}\n🔗 {r['Link']}\n\n"
         await update.message.reply_text(msg, parse_mode='Markdown')
-        await update.message.reply_text("¿Qué buscás, bo? Decime y bicho qué hay.")
-
-    # --- 5. LÓGICA GLOBAL (Filas 187 a 188 = index 185 a 186) ---
+        await update.message.reply_text("¿Qué buscás, bo?")
     else:
-        context.user_data['pais'] = 'GLOBAL'
-        # 5.1 Productos al azar (F187-188)
-        rango_gl = [185, 186]
-        azar = [datos[i] for i in rango_gl]
-        msg = "🌎 **GLOBAL DEALS** 🌎\n\n"
-        for r in azar:
-            msg += f"📦 {r.get('Producto')}\n🔗 {r.get('Link')}\n\n"
+        context.user_data['p'] = 'GL'
+        msg = "🌎 **GLOBAL DEALS**\n\n"
+        for r in datos[185:187]: msg += f"📦 {r['Producto']}\n🔗 {r['Link']}\n\n"
         await update.message.reply_text(msg, parse_mode='Markdown')
-        await update.message.reply_text("What are you looking for? / ¿Qué buscas? / O que você está procurando?")
-
+        await update.message.reply_text("What are you looking for?")
     return EN_BUSQUEDA
 
 async def ejecutar_busqueda(update: Update, context: ContextTypes.DEFAULT_TYPE):
     datos = obtener_datos()
-    query = update.message.text.lower()
-    pais = context.user_data.get('pais')
-
-    # Definir rangos exactos de búsqueda por instrucción
-    if pais == 'AR':
-        indices = list(range(0, 96)) + [185, 186] # F2-97 y F187-188
-    elif pais == 'CL':
-        indices = list(range(96, 184)) + [185, 186] # F98-185 y F187-188
-    elif pais == 'UY':
-        indices = [184, 185, 186] # F186 y F187-188
+    q = update.message.text.lower()
+    p = context.user_data.get('p')
+    idx = (list(range(0, 96)) + [185, 186]) if p == 'AR' else (list(range(96, 184)) + [185, 186]) if p == 'CL' else [184, 185, 186] if p == 'UY' else [185, 186]
+    res = [datos[i] for i in idx if i < len(datos) and (q in str(datos[i].get('Keywords','')).lower() or q in str(datos[i].get('Producto','')).lower())]
+    if res:
+        for x in res[:5]: await update.message.reply_text(f"📍 **{x['Producto']}**\n🔗 {x['Link']}", parse_mode='Markdown')
     else:
-        indices = [185, 186] # F187-188
-
-    # Buscar coincidencia y relacionados
-    encontrados = []
-    for i in indices:
-        if i < len(datos):
-            row = datos[i]
-            if query in str(row.get('Keywords', '')).lower() or query in str(row.get('Producto', '')).lower():
-                encontrados.append(row)
-
-    if encontrados:
-        await update.message.reply_text("✅ ¡Mira lo que encontré!")
-        # Muestra hasta 5 resultados (el buscado + relacionados)
-        for res in encontrados[:5]:
-            await update.message.reply_text(f"📍 **{res.get('Producto')}**\n🔗 {res.get('Link')}", parse_mode='Markdown')
-    else:
-        # Si no hay éxito local, ofrece Globales
-        await update.message.reply_text("No encontré eso localmente, pero chequea estas opciones globales:")
-        for idx in [185, 186]:
-            row = datos[idx]
-            await update.message.reply_text(f"🌎 {row.get('Producto')}\n🔗 {row.get('Link')}")
-
+        await update.message.reply_text("Nada local, mira esto global:")
+        for i in [185, 186]: await update.message.reply_text(f"🌎 {datos[i]['Producto']}\n🔗 {datos[i]['Link']}")
     return EN_BUSQUEDA
 
 if __name__ == '__main__':
-    application = Application.builder().token(TOKEN).build()
-    
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
-        states={
-            SELECCION_PAIS: [MessageHandler(filters.TEXT & ~filters.COMMAND, seleccionar_pais)],
-            EN_BUSQUEDA: [MessageHandler(filters.TEXT & ~filters.COMMAND, ejecutar_busqueda)],
-        },
-        fallbacks=[CommandHandler('start', start)],
-    )
-    
-    application.add_handler(conv_handler)
-    application.run_polling()
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(ConversationHandler(entry_points=[CommandHandler('start', start)], 
+        states={SELECCION_PAIS: [MessageHandler(filters.TEXT & ~filters.COMMAND, seleccionar_pais)], 
+        EN_BUSQUEDA: [MessageHandler(filters.TEXT & ~filters.COMMAND, ejecutar_busqueda)]}, 
+        fallbacks=[CommandHandler('start', start)]))
+    app.run_polling()
