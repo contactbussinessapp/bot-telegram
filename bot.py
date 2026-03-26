@@ -156,7 +156,7 @@ async def ejecutar_busqueda(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     return EN_BUSQUEDA
 
-# -------- MAIN COMPATIBLE RENDER + PYTHON 3.14 --------
+# -------- MAIN CORRECTO PYTHON 3.14 --------
 async def main():
     app = Application.builder().token(TOKEN).build()
 
@@ -173,15 +173,7 @@ async def main():
 
     print("🚀 Radar VIP corriendo...")
 
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling()
-
-    # Mantener vivo el bot
-    while True:
-        await asyncio.sleep(3600)
+    await app.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
-    loop = asyncio.get_event_loop()
-    loop.create_task(main())
-    loop.run_forever()
+    asyncio.run(main())
