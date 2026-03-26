@@ -1,30 +1,36 @@
-import logging, random, os, requests, csv
+import logging, random, os, requests, csv, asyncio
 from io import StringIO
 from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler,
+    filters, ContextTypes, ConversationHandler
+)
 
+# -------- CONFIG --------
 CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSU00GJR_bjeMwu_2SdaU_Lrym18DZYQKYA0-uW7mzw_2KMbcNYfCAD34mLjHZpKRZH3oOviud0agl3/pub?gid=0&single=true&output=csv"
 TOKEN = os.getenv("TELEGRAM_TOKEN")
+
+if not TOKEN:
+    raise ValueError("Falta TELEGRAM_TOKEN")
 
 SELECCION_PAIS, EN_BUSQUEDA = range(2)
 logging.basicConfig(level=logging.INFO)
 
-# ---------- DATA ----------
+# -------- DATA --------
 def obtener_datos():
     try:
         r = requests.get(CSV_URL, timeout=10)
         f = StringIO(r.content.decode('utf-8'))
-        data = list(csv.DictReader(f))
-        return data
+        return list(csv.DictReader(f))
     except:
-        return None
+        return []
 
 def safe_get(datos, indices):
     return [datos[i] for i in indices if i < len(datos)]
 
-# ---------- BUSCADOR ----------
+# -------- BUSCADOR --------
 def buscar_productos(datos, idxs, query):
-    query = query.lower().split()
+    query_words = query.lower().split()
 
     resultados = []
     relacionados = []
@@ -33,16 +39,18 @@ def buscar_productos(datos, idxs, query):
         if i >= len(datos): continue
         item = datos[i]
 
-        texto = (str(item.get('Producto','')) + " " + str(item.get('Keywords',''))).lower()
+        texto = (
+            str(item.get('Producto','')) + " " +
+            str(item.get('Keywords',''))
+        ).lower()
 
-        score = sum(1 for q in query if q in texto)
+        score = sum(1 for q in query_words if q in texto)
 
         if score > 0:
             resultados.append((score, item))
         else:
             relacionados.append(item)
 
-    # ordenar por relevancia
     resultados.sort(reverse=True, key=lambda x: x[0])
 
     principales = [x[1] for x in resultados[:5]]
@@ -50,7 +58,7 @@ def buscar_productos(datos, idxs, query):
 
     return principales, sugeridos
 
-# ---------- BOT ----------
+# -------- BOT --------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     botones = [['🇦🇷 AR', '🇨🇱 CL'], ['🇺🇾 UY', '🌎 GLOBAL']]
     await update.message.reply_text(
@@ -71,7 +79,7 @@ async def seleccionar_pais(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if 'AR' in op:
         context.user_data['p'] = 'AR'
 
-        ofertas = safe_get(datos, range(1,8))  # ✔ correcto
+        ofertas = safe_get(datos, range(1,8))
         msg = "🇦🇷 *OPORTUNIDADES DEL DÍA*\n\n"
         for r in ofertas:
             msg += f"🔥 *{r['Producto']}*\n🔗 {r['Link']}\n\n"
@@ -146,7 +154,6 @@ async def ejecutar_busqueda(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg += f"👉 {s['Producto']}\n"
 
         await update.message.reply_text(msg, parse_mode='Markdown')
-
     else:
         await update.message.reply_text("😕 No encontré eso, pero mirá esto:")
         for s in sugeridos:
@@ -154,8 +161,8 @@ async def ejecutar_busqueda(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     return EN_BUSQUEDA
 
-# ---------- MAIN ----------
-if __name__ == '__main__':
+# -------- MAIN (FIX PYTHON 3.14) --------
+async def main():
     app = Application.builder().token(TOKEN).build()
 
     conv = ConversationHandler(
@@ -170,4 +177,7 @@ if __name__ == '__main__':
     app.add_handler(conv)
 
     print("🚀 Radar VIP corriendo...")
-    app.run_polling(drop_pending_updates=True)
+    await app.run_polling(drop_pending_updates=True)
+
+if __name__ == '__main__':
+    asyncio.run(main())
