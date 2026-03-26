@@ -1,97 +1,137 @@
-import os, telebot, requests, csv, re, urllib.parse
+import logging
+import random
+import os
+import pandas as pd
+import requests
 from io import StringIO
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 
-TOKEN = os.environ.get('TOKEN')
-SHEET_ID = '1zGZF5meVfgRZvRLSvKGelwYs2h3pgA7YEpC_1xj9cTk'
-URL_SHEET = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv'
+# --- CONFIGURACIÓN SEGURA ---
+# El link del CSV es público por diseño, pero el TOKEN NO.
+CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSU00GJR_bjeMwu_2SdaU_Lrym18DZYQKYA0-uW7mzw_2KMbcNYfCAD34mLjHZpKRZH3oOviud0agl3/pub?gid=0&single=true&output=csv"
 
-bot = telebot.TeleBot(TOKEN)
-user_data = {}
+# Render leerá el token desde sus variables de entorno
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+
+# Estados de la conversación
+SELECCION_PAIS, EN_BUSQUEDA = range(2)
+
+logging.basicConfig(level=logging.INFO)
 
 def obtener_datos():
+    """Descarga los datos actualizados del Google Sheet"""
     try:
-        r = requests.get(URL_SHEET, timeout=10)
-        r.encoding = 'utf-8'
-        return list(csv.reader(StringIO(r.text.replace('\r', ''))))
-    except: return []
+        response = requests.get(CSV_URL)
+        response.raise_for_status()
+        decode_data = StringIO(response.content.decode('utf-8'))
+        df = pd.read_csv(decode_data)
+        df.columns = ['Pais', 'Plataforma', 'Producto', 'Keywords', 'Link', 'Prioridad']
+        return df
+    except Exception as e:
+        logging.error(f"Error al obtener datos: {e}")
+        return None
 
-@bot.message_handler(commands=['start'])
-def welcome(message):
-    markup = telebot.types.InlineKeyboardMarkup(row_width=2)
-    btns = [
-        telebot.types.InlineKeyboardButton("🇦🇷 AR", callback_data="r_AR"),
-        telebot.types.InlineKeyboardButton("🇨🇱 CL", callback_data="r_CL"),
-        telebot.types.InlineKeyboardButton("🇺🇾 UY", callback_data="r_UY"),
-        telebot.types.InlineKeyboardButton("🌍 GLOBAL", callback_data="r_GLOBAL")
-    ]
-    markup.add(*btns)
-    bot.reply_to(message, "🚀 *RADAR VIP GLOBAL*\nSeleccioná tu región:", parse_mode="Markdown", reply_markup=markup)
+# --- LÓGICA DEL BOT ---
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("r_"))
-def set_region(call):
-    region = call.data.split("_")[1]
-    user_data[call.message.chat.id] = region
-    bot.answer_callback_query(call.id)
-    
-    data = obtener_datos()
-    
-    # OPORTUNIDADES AR (Filas 2 a 8)
-    if region == "AR" and len(data) > 1:
-        ofertas = data[1:8]
-        msg = "🔥 *OPORTUNIDADES DEL DÍA EN AR* 🔥\n\n"
-        for f in ofertas:
-            if len(f) < 4: continue
-            m = re.search(r'(https?://[^\s\n]+)', f[3])
-            if m: msg += f"⚡ [{f[2]}]({m.group(0)}) - *{f[1]}*\n"
-        bot.send_message(call.message.chat.id, msg, parse_mode="Markdown", disable_web_page_preview=True)
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    botones = [['🇦🇷 AR', '🇨🇱 CL', '🇺🇾 UY', '🌎 GLOBAL']]
+    await update.message.reply_text(
+        "✨ BIENVENIDO A RADAR VIP GLOBAL ✨\n¿Desde dónde nos visitas hoy?",
+        reply_markup=ReplyKeyboardMarkup(botones, one_time_keyboard=True, resize_keyboard=True)
+    )
+    return SELECCION_PAIS
 
-    # BIENVENIDA UY (Fila 186)
-    elif region == "UY" and len(data) >= 186:
-        f_uy = data[185] # Fila 186
-        m = re.search(r'(https?://[^\s\n]+)', f_uy[3])
-        if m:
-            bot.send_message(call.message.chat.id, f"🇺🇾 *Bienvenido a Uruguay*\n\nVisitá nuestra tienda oficial:\n💎 [{f_uy[2]}]({m.group(0)})", parse_mode="Markdown")
+async def seleccionar_pais(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    df = obtener_datos()
+    if df is None:
+        await update.message.reply_text("Error de conexión. Intenta más tarde.")
+        return ConversationHandler.END
 
-    bot.send_message(call.message.chat.id, f"🔎 *¿Qué buscás en {region}?*", parse_mode="Markdown")
+    seleccion = update.message.text
+    context.user_data['pais'] = seleccion
 
-@bot.message_handler(func=lambda message: True)
-def buscar(message):
-    uid = message.chat.id
-    if uid not in user_data: return
-    
-    region = user_data[uid]
-    query = message.text.lower().strip()
-    data = obtener_datos()
-    
-    # Bloques exactos
-    bloque = []
-    if region == "AR": bloque = data[1:97]       # Fila 2 a 97
-    elif region == "CL": bloque = data[97:185]   # Fila 98 a 185
-    elif region == "UY": bloque = data[185:186]  # Fila 186 (Emidica)
-    elif region == "GLOBAL": bloque = data[186:188]
+    if 'AR' in seleccion:
+        oportunidades = df.iloc[0:7] 
+        msg = "🇦🇷 **OPORTUNIDADES DEL DÍA (AR)** 🇦🇷\n\n"
+        for _, row in oportunidades.iterrows():
+            msg += f"🔥 {row['Producto']}\n🔗 {row['Link']}\n\n"
+        await update.message.reply_text(msg, parse_mode='Markdown')
+        await update.message.reply_text("¿Qué andás buscando, che? Decime.")
 
-    res = []
-    for fila in bloque:
-        if len(fila) < 4: continue
-        if query in " ".join(fila).lower():
-            m = re.search(r'(https?://[^\s\n]+)', fila[3])
-            if m: res.append(f"💎 *{fila[1]}* - [{fila[2]}]({m.group(0)})")
+    elif 'CL' in seleccion:
+        rango_cl = list(range(96, 184))
+        azar = df.iloc[random.sample(rango_cl, 3)]
+        msg = "🇨🇱 **DESTACADOS CHILE** 🇨🇱\n\n"
+        for _, row in azar.iterrows():
+            msg += f"✨ {row['Producto']}\n🔗 {row['Link']}\n\n"
+        await update.message.reply_text(msg, parse_mode='Markdown')
+        await update.message.reply_text("¿Qué buscái hoy? Dime qué necesitái.")
 
-    if res:
-        bot.send_message(uid, f"🎯 *Resultados:* \n\n" + "\n".join(list(dict.fromkeys(res))), parse_mode="Markdown", disable_web_page_preview=True)
+    elif 'UY' in seleccion:
+        indices_uy = [184, 185, 186]
+        azar = df.iloc[random.sample(indices_uy, 2)]
+        msg = "🇺🇾 **SUGERENCIAS URUGUAY** 🇺🇾\n\n"
+        for _, row in azar.iterrows():
+            msg += f"🇺🇾 {row['Producto']}\n🔗 {row['Link']}\n\n"
+        await update.message.reply_text(msg, parse_mode='Markdown')
+        await update.message.reply_text("¿Qué buscás, bo? Decime.")
+
     else:
-        # Failsafe con Amazon/Ali
-        q = urllib.parse.quote(query)
-        txt = f"❌ No encontré '{query}' en el radar local.\n\nPrueba aquí:\n\n"
-        # Si es Uruguay, le recordamos Emidica por las dudas antes de ir a Amazon
-        if region == "UY" and len(data) >= 186:
-            m_uy = re.search(r'(https?://[^\s\n]+)', data[185][3])
-            if m_uy: txt += f"🇺🇾 [Tienda Emidica Uruguay]({m_uy.group(0)})\n\n"
-            
-        txt += f"🛒 [Amazon](https://www.amazon.com/s?k={q}&tag=radarvip01-20)\n"
-        txt += f"🛍️ [AliExpress](https://s.click.aliexpress.com/deep_link.htm?aff_short_key=_c3MIbod9&dl_target_url=https://www.aliexpress.com/wholesale?SearchText={q})"
-        bot.send_message(uid, txt, parse_mode="Markdown", disable_web_page_preview=True)
+        globales = df.iloc[185:187]
+        msg = "🌎 **GLOBAL DEALS** 🌎\n\n"
+        for _, row in globales.iterrows():
+            msg += f"📦 {row['Producto']}\n🔗 {row['Link']}\n\n"
+        await update.message.reply_text(msg, parse_mode='Markdown')
+        await update.message.reply_text("What are you looking for? / ¿Qué buscas?")
 
-if __name__ == "__main__":
-    bot.remove_webhook()
-    bot.polling(none_stop=True)
+    return EN_BUSQUEDA
+
+async def ejecutar_busqueda(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    df = obtener_datos()
+    query = update.message.text.lower()
+    pais = context.user_data.get('pais')
+
+    if 'AR' in pais:
+        rango = list(range(0, 96)) + [185, 186]
+    elif 'CL' in pais:
+        rango = list(range(96, 184)) + [185, 186]
+    elif 'UY' in pais:
+        rango = [184, 185, 186]
+    else:
+        rango = [185, 186]
+
+    subset = df.iloc[rango]
+    encontrados = []
+
+    for _, row in subset.iterrows():
+        if query in str(row['Keywords']).lower():
+            encontrados.append(row)
+
+    if encontrados:
+        await update.message.reply_text("✅ ¡Encontré esto!")
+        for res in encontrados[:4]:
+            await update.message.reply_text(f"📍 **{res['Producto']}**\n🔗 {res['Link']}", parse_mode='Markdown')
+    else:
+        await update.message.reply_text("Sin éxito local, bichea en Global:")
+        for idx in [185, 186]:
+            row = df.iloc[idx]
+            await update.message.reply_text(f"🌎 {row['Producto']}\n🔗 {row['Link']}")
+
+    return EN_BUSQUEDA
+
+if __name__ == '__main__':
+    if not TOKEN:
+        print("ERROR: No se encontró el TOKEN en las variables de entorno.")
+    else:
+        application = Application.builder().token(TOKEN).build()
+        handler = ConversationHandler(
+            entry_points=[CommandHandler('start', start)],
+            states={
+                SELECCION_PAIS: [MessageHandler(filters.TEXT & ~filters.COMMAND, seleccionar_pais)],
+                EN_BUSQUEDA: [MessageHandler(filters.TEXT & ~filters.COMMAND, ejecutar_busqueda)],
+            },
+            fallbacks=[CommandHandler('cancel', lambda u, c: ConversationHandler.END)],
+        )
+        application.add_handler(handler)
+        application.run_polling()
